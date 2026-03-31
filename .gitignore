@@ -2,16 +2,23 @@
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
+*.traj
+*.log
+*.tmp
 
 # Notebook and test artifacts
 outputs/qct_poscars/*
 !outputs/qct_poscars/.gitkeep
+outputs/mace_md_check/*
+!outputs/mace_md_check/.gitkeep
 
 # User-provided VASP inputs
 inputs/molecule/*
 !inputs/molecule/.gitkeep
 inputs/surface/*
 !inputs/surface/.gitkeep
+model/*
+!model/.gitkeep
 
 # macOS
 .DS_Store

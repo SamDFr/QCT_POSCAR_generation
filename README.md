@@ -1,6 +1,6 @@
 # QCT POSCAR generator
 
-This repository contains the `QCT_POSCAR_generator.ipynb` notebook used to build molecule/surface initial configurations for QCT workflows.
+This repository contains the `QCT_POSCAR_generator.ipynb` notebook used to build molecule/surface initial configurations for QCT workflows, and `MACE_quick_MD_check.ipynb` for short validation MD runs on the generated POSCAR files.
 
 The notebook is configured so you only provide VASP outputs as inputs. It reads `vasprun.xml` for the isolated molecule and the surface trajectory, then generates the molecular vibrational `.npz` cache automatically inside the notebook.
 
@@ -8,7 +8,10 @@ The notebook is configured so you only provide VASP outputs as inputs. It reads 
 
 ```text
 .
+├── MACE_quick_MD_check.ipynb
 ├── QCT_POSCAR_generator.ipynb
+├── model/
+│   └── mace-mh-1.model
 ├── inputs/
 │   ├── molecule/
 │   └── surface/
@@ -41,6 +44,7 @@ The notebook reads the following paths by default:
 
 - `inputs/molecule/vasprun.xml`
 - `inputs/surface/vasprun.xml`
+- `model/mace-mh-1.model` for the quick MACE MD check notebook
 
 The notebook also generates:
 
@@ -56,14 +60,32 @@ The main assumptions are:
 - `inputs/surface/vasprun.xml` must contain an ionic trajectory that ASE can read as a sequence of frames.
 - The surface normal is assumed to be along `+z`, and the molecule is launched toward `-z`.
 - The molecule is treated as a free molecule for the ZPE initialization, so the vibrational modes must correspond to that isolated molecule, not to the adsorbed system.
-- Output POSCAR atom ordering is preserved intentionally so it stays consistent with the saved velocity arrays.
+- Output POSCAR atom ordering is preserved intentionally.
 
-Generated POSCAR files, velocity archives, and metadata are written to:
+Generated POSCAR files and metadata are written to:
 
 - `outputs/qct_poscars/`
+
+The quick MACE validation notebook writes short MD trajectories and plots under:
+
+- `outputs/mace_md_check/`
+
+## Quick MACE MD check
+
+`MACE_quick_MD_check.ipynb` is intended to validate one generated POSCAR quickly before larger-scale use.
+
+It does the following:
+
+- reads one `outputs/qct_poscars/POSCAR_*`
+- reuses the positions and velocities stored in that POSCAR
+- attaches the local model `model/mace-mh-1.model`
+- runs a short constant-energy NVE trajectory with `VelocityVerlet`
+- shows a `tqdm` progress bar during the run
+- renders both static structure views and an in-notebook trajectory animation
 
 ## GitHub notes
 
 - The local virtual environment `.venv/` is ignored.
 - Generated outputs are ignored, except for placeholder files that keep the folder structure in Git.
 - Input directories are tracked but their contents are ignored by default, which avoids committing heavy or private VASP files accidentally.
+- The local `model/` directory contents are ignored by default, so large model binaries are not committed accidentally.

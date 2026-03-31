@@ -1,6 +1,10 @@
 numpy
 ase
+matplotlib
 jupyterlab
 notebook
 ipykernel
 pymatgen
+torch
+mace-torch
+tqdm
