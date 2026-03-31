@@ -1,0 +1,6 @@
+numpy
+ase
+jupyterlab
+notebook
+ipykernel
+pymatgen
