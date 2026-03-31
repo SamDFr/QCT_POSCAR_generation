@@ -8,3 +8,5 @@ pymatgen
 torch
 mace-torch
 tqdm
+nglview
+ipywidgets
