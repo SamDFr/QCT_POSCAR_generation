@@ -60,6 +60,7 @@ The main assumptions are:
 - `inputs/surface/vasprun.xml` must contain an ionic trajectory that ASE can read as a sequence of frames.
 - The surface normal is assumed to be along `+z`, and the molecule is launched toward `-z`.
 - The molecule is treated as a free molecule for the ZPE initialization, so the vibrational modes must correspond to that isolated molecule, not to the adsorbed system.
+- An optional rigid-body rotational energy can be added on top of the ZPE by setting `ROTATION_SETTINGS["temperature_K"]` in `QCT_POSCAR_generator.ipynb`. Use `0.0` or `"0K"` to disable it.
 - Output POSCAR atom ordering is preserved intentionally.
 
 Generated POSCAR files and metadata are written to:
@@ -70,6 +71,15 @@ The quick MACE validation notebook writes short MD trajectories and plots under:
 
 - `outputs/mace_md_check/`
 
+## POSCAR generation options
+
+`QCT_POSCAR_generator.ipynb` supports both vibrational ZPE initialization and optional rigid-body rotational excitation of the free molecule before it is placed above the surface.
+
+- ZPE is controlled with `ZPE_SETTINGS`.
+- Rotational excitation is controlled with `ROTATION_SETTINGS["temperature_K"]`.
+- Set `ROTATION_SETTINGS["temperature_K"] = 0.0` or `"0K"` to deposit only the ZPE.
+- Set `ROTATION_SETTINGS["temperature_K"]` to a nonzero value in kelvin to add thermal rotational energy on top of the ZPE.
+
 ## Quick MACE MD check
 
 `MACE_quick_MD_check.ipynb` is intended to validate one generated POSCAR quickly before larger-scale use.
@@ -78,10 +88,17 @@ It does the following:
 
 - reads one `outputs/qct_poscars/POSCAR_*`
 - reuses the positions and velocities stored in that POSCAR
-- attaches the local model `model/mace-mh-1.model`
+- attaches the local model `model/mace-mh-1.model`. MACE model can be downloaded here: [MACE models](https://huggingface.co/mace-foundations)
 - runs a short constant-energy NVE trajectory with `VelocityVerlet`
 - shows a `tqdm` progress bar during the run
 - renders both static structure views and an in-notebook trajectory animation
+- can optionally export the saved MD trajectory to `xyz` or `extxyz` format
+
+Useful notebook settings:
+
+- `CONFIG["save_xyz"] = True` enables XYZ export after the MD run.
+- `CONFIG["xyz_format"]` accepts `"xyz"` or `"extxyz"`.
+- `CONFIG["xyz_name"]` controls the exported file name inside `outputs/mace_md_check/`.
 
 ## GitHub notes
 
