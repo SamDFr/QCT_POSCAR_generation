@@ -1,8 +1,8 @@
 # QCT POSCAR generator
 
-This repository contains the `QCT_POSCAR_generator.ipynb` notebook used to build molecule/surface initial configurations for QCT workflows, and `MACE_quick_MD_check.ipynb` for short validation MD runs on the generated POSCAR files.
+This repository contains the `QCT_POSCAR_generator.ipynb` notebook used to build molecule/surface initial configurations for QCT workflows, and `MACE_quick_MD_check.ipynb` for short validation MD runs on the generated structures.
 
-The notebook is configured so you only provide VASP outputs as inputs. It reads `vasprun.xml` for the isolated molecule and the surface trajectory, then generates the molecular vibrational `.npz` cache automatically inside the notebook.
+The notebook can read the isolated molecule from VASP and the surface trajectory either from `vasprun.xml` or from a LAMMPS dump. It also generates the molecular vibrational `.npz` cache automatically inside the notebook.
 
 ## Project layout
 
@@ -43,7 +43,7 @@ jupyter lab
 The notebook reads the following paths by default:
 
 - `inputs/molecule/vasprun.xml`
-- `inputs/surface/vasprun.xml`
+- `inputs/surface/vasprun.xml` or a LAMMPS dump such as `inputs/surface/lammps/50K/50K_traj_all.lammpstrj`
 - `model/mace-mh-1.model` for the quick MACE MD check notebook
 
 The notebook also generates:
@@ -57,13 +57,13 @@ The workflow is generic with respect to the molecule and surface species: nothin
 The main assumptions are:
 
 - `inputs/molecule/vasprun.xml` must come from an isolated-molecule calculation that contains vibrational modes (`IBRION=5` or `IBRION=6`).
-- `inputs/surface/vasprun.xml` must contain an ionic trajectory that ASE can read as a sequence of frames.
+- The surface trajectory must be readable either as a VASP XML trajectory or as a LAMMPS text dump.
 - The surface normal is assumed to be along `+z`, and the molecule is launched toward `-z`.
 - The molecule is treated as a free molecule for the ZPE initialization, so the vibrational modes must correspond to that isolated molecule, not to the adsorbed system.
 - An optional rigid-body rotational energy can be added on top of the ZPE by setting `ROTATION_SETTINGS["temperature_K"]` in `QCT_POSCAR_generator.ipynb`. Use `0.0` or `"0K"` to disable it.
 - Output POSCAR atom ordering is preserved intentionally.
 
-Generated POSCAR files and metadata are written to:
+Generated structure files and metadata are written to:
 
 - `outputs/qct_poscars/`
 
@@ -71,7 +71,59 @@ The quick MACE validation notebook writes short MD trajectories and plots under:
 
 - `outputs/mace_md_check/`
 
-## POSCAR generation options
+## Generator configuration
+
+`QCT_POSCAR_generator.ipynb` is driven by a few configuration dictionaries near the top of the notebook.
+
+### `PATHS`
+
+Controls the molecule input, the surface trajectory, the optional surface reference used to infer chemical symbols from LAMMPS atom types, and the output directory.
+
+### `SURFACE_SAMPLING`
+
+Controls how the thermalized surface trajectory is read:
+
+- `format`: `"vasp-xml"` or `"lammps-dump-text"`
+- `index`: ASE-style subsampling string such as `"::10"`
+- `discard_initial_ps`: time to discard before any frame selection is applied
+- `keep_velocities`: preserve trajectory velocities when available
+- `POTIM_fs`: time spacing between saved frames in femtoseconds
+- `lammps_units`: LAMMPS velocity units, currently `"metal"` or `"real"`
+- `type_map`: mapping from LAMMPS integer atom types to chemical symbols if the dump does not contain an `element` column
+- `sort_by_id`: sort each LAMMPS snapshot by atom id before building the ASE frame
+
+Important ordering:
+
+- `discard_initial_ps` is applied first
+- `index` is applied on the remaining trajectory afterward
+
+Set `discard_initial_ps = 0.0` to keep all frames. This works for both LAMMPS dumps and `vasprun.xml`.
+
+### `GENERATION`
+
+Controls the actual QCT structure generation:
+
+- `n_configurations`: number of random structures generated per incident energy
+- `master_seed`: master RNG seed
+- `surface_distance_A`: nominal molecule COM height above the top surface plane
+- `min_clearance`: minimum allowed intermolecular clearance
+- `incident_energy_eV`: fallback single incident energy
+- `incident_energies_eV`: one energy or a list of energies in eV; when set, this overrides `incident_energy_eV`
+- `incident_direction`: incoming direction vector
+- `xy_mode`: `"random"` or `"center"`
+
+If `incident_energies_eV` contains several values, the notebook generates `n_configurations` independent structures for each energy.
+
+### `OUTPUT_SETTINGS`
+
+Controls which file formats are written:
+
+- `write_poscar`: write VASP `POSCAR_*`
+- `write_lammps_data`: write LAMMPS geometry files `geometry_*.lmp`
+- `lammps_atom_style`: atom style for the LAMMPS data writer, currently `"atomic"`
+- `lammps_units`: units keyword written into the LAMMPS data file, typically `"metal"`
+
+### `ZPE_SETTINGS` and `ROTATION_SETTINGS`
 
 `QCT_POSCAR_generator.ipynb` supports both vibrational ZPE initialization and optional rigid-body rotational excitation of the free molecule before it is placed above the surface.
 
@@ -79,6 +131,36 @@ The quick MACE validation notebook writes short MD trajectories and plots under:
 - Rotational excitation is controlled with `ROTATION_SETTINGS["temperature_K"]`.
 - Set `ROTATION_SETTINGS["temperature_K"] = 0.0` or `"0K"` to deposit only the ZPE.
 - Set `ROTATION_SETTINGS["temperature_K"]` to a nonzero value in kelvin to add thermal rotational energy on top of the ZPE.
+
+## Output layout
+
+The notebook writes one `metadata.json` file per output directory.
+
+Single-energy mode:
+
+- `outputs/qct_poscars/POSCAR_000`, `POSCAR_001`, ...
+- `outputs/qct_poscars/geometry_000.lmp`, `geometry_001.lmp`, ...
+- `outputs/qct_poscars/metadata.json`
+- `outputs/qct_poscars/metadata_all.json`
+
+Multi-energy mode:
+
+- `outputs/qct_poscars/Einc_0p2_eV/`
+- `outputs/qct_poscars/Einc_0p5_eV/`
+- `outputs/qct_poscars/Einc_1_eV/`
+- each subdirectory contains its own `POSCAR_*`, `geometry_*.lmp`, and `metadata.json`
+- `outputs/qct_poscars/metadata_all.json` collects every generated configuration across all energies
+
+The metadata records, for each configuration:
+
+- the selected surface snapshot index
+- random seeds
+- chosen XY placement
+- final clearance
+- incident energy and speed
+- rotational energy
+- ZPE diagnostics
+- paths to the generated POSCAR and LAMMPS geometry files when enabled
 
 ## How vibrational energy is added
 
