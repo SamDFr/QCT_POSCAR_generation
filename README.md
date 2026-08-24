@@ -2,7 +2,7 @@
 
 This repository contains the `QCT_POSCAR_generator.ipynb` notebook used to build molecule/surface initial configurations for QCT workflows, and `MACE_quick_MD_check.ipynb` for short validation MD runs on the generated structures.
 
-The notebook can read the isolated molecule from VASP and the surface trajectory either from `vasprun.xml` or from a LAMMPS dump. It also generates the molecular vibrational `.npz` cache automatically inside the notebook.
+The notebook can prepare the isolated molecule either from VASP or from a local MACE foundation model. Surface trajectories can come from VASP, a LAMMPS dump, or another ASE-readable format. It also generates the molecular vibrational `.npz` cache automatically inside the notebook.
 
 ## Project layout
 
@@ -10,6 +10,8 @@ The notebook can read the isolated molecule from VASP and the surface trajectory
 .
 ├── MACE_quick_MD_check.ipynb
 ├── QCT_POSCAR_generator.ipynb
+├── routines/
+│   └── mace.py
 ├── model/
 │   └── mace-mh-1.model
 ├── inputs/
@@ -42,9 +44,9 @@ jupyter lab
 
 The notebook reads the following paths by default:
 
-- `inputs/molecule/vasprun.xml`
-- `inputs/surface/vasprun.xml` or a LAMMPS dump such as `inputs/surface/lammps/50K/50K_traj_all.lammpstrj`
-- `model/mace-mh-1.model` for the quick MACE MD check notebook
+- VASP mode: `inputs/molecule/vasprun.xml`
+- MACE mode: an ASE-supported molecule formula such as `"SO2"` (no structure file required), plus a local model such as `model/mace-mh-1.model`; a structure file is optional for unsupported molecules
+- surface: `inputs/surface/vasprun.xml`, a LAMMPS dump, or an ASE-readable trajectory/structure (for example `.traj`, `.extxyz`, or `POSCAR`)
 
 The notebook also generates:
 
@@ -56,8 +58,9 @@ The workflow is generic with respect to the molecule and surface species: nothin
 
 The main assumptions are:
 
-- `inputs/molecule/vasprun.xml` must come from an isolated-molecule calculation that contains vibrational modes (`IBRION=5` or `IBRION=6`).
-- The surface trajectory must be readable either as a VASP XML trajectory or as a LAMMPS text dump.
+- In VASP mode, `inputs/molecule/vasprun.xml` must contain vibrational modes (`IBRION=5` or `IBRION=6`).
+- In MACE mode, the notebook builds an ASE molecule from the configured formula (or reads an optional supplied structure), optimizes it with the selected local foundation model, and computes finite-difference harmonic modes before initializing the QCT velocities.
+- The surface trajectory must be readable by ASE. LAMMPS text dumps retain their dedicated parser; generic ASE formats include `.traj`, `.extxyz`, and VASP `POSCAR`/`CONTCAR`.
 - The surface normal is assumed to be along `+z`, and the molecule is launched toward `-z`.
 - The molecule is treated as a free molecule for the ZPE initialization, so the vibrational modes must correspond to that isolated molecule, not to the adsorbed system.
 - An optional rigid-body rotational energy can be added on top of the ZPE by setting `ROTATION_SETTINGS["temperature_K"]` in `QCT_POSCAR_generator.ipynb`. Use `0.0` or `"0K"` to disable it.
@@ -79,11 +82,26 @@ The quick MACE validation notebook writes short MD trajectories and plots under:
 
 Controls the molecule input, the surface trajectory, the optional surface reference used to infer chemical symbols from LAMMPS atom types, and the output directory.
 
+`mace_model` is used when `MOLECULE_SOURCE["format"] = "mace"`. The default model directory in this repository is `model/` (not `models/`); change `mace_model` if yours is stored elsewhere. `molecule_structure` is only used when the optional file input mode is selected.
+
+### `MOLECULE_SOURCE`
+
+Choose the source of isolated-molecule normal modes:
+
+- `format: "vasp"` (default): read geometry and modes from `molecule_vasprun`.
+- `format: "mace"`: construct or read the starting molecule, optimize with `mace_model`, then calculate harmonic finite-difference modes. `fmax_eV_A`, `max_steps`, and `vibration_delta_A` control the calculation.
+
+By default, MACE uses `input_mode: "formula"` and `molecule_formula: "SO2"`, so it requires no molecule input file. ASE supplies a standard initial SO<sub>2</sub> geometry, then MACE optimizes it. Change `molecule_formula` to another ASE-supported molecule such as `"CO2"` or `"H2O"`. For a molecule ASE does not provide, set `input_mode: "file"`, provide `molecule_structure`, and set `structure_format` to ASE's format name (such as `"vasp"`, `"extxyz"`, or `None` for automatic detection).
+
+The MACE routine does not assume MACE-MH-1. `head: None` (the default) is appropriate for ordinary single-head MACE models. Multi-head MACE models cannot safely infer which physical head you want: set `head` to the exact name you intend to use (for example, `"omat_pbe"`). No particular head is imposed by the QCT code.
+
+MACE mode requires a model compatible with `mace.calculators.mace_mp` and may take appreciable time because it evaluates every finite displacement. Inspect a warning about imaginary frequencies before relying on the generated initial conditions.
+
 ### `SURFACE_SAMPLING`
 
 Controls how the thermalized surface trajectory is read:
 
-- `format`: `"vasp-xml"` or `"lammps-dump-text"`
+- `format`: `"vasp-xml"`, `"lammps-dump-text"`, or any ASE format name such as `"traj"`, `"extxyz"`, or `"vasp"`
 - `index`: ASE-style subsampling string such as `"::10"`
 - `discard_initial_ps`: time to discard before any frame selection is applied
 - `keep_velocities`: preserve trajectory velocities when available
@@ -98,6 +116,8 @@ Important ordering:
 - `index` is applied on the remaining trajectory afterward
 
 Set `discard_initial_ps = 0.0` to keep all frames. This works for both LAMMPS dumps and `vasprun.xml`.
+
+For ASE trajectory formats, stored ASE velocities are preserved. If the file has no velocities, the notebook estimates them from adjacent frames using `POTIM_fs`; a one-frame structure receives zero velocities. A static POSCAR is therefore usable as a surface input, but it is not thermally sampled unless it carries appropriate velocities.
 
 ### `GENERATION`
 
